@@ -7,7 +7,7 @@ class sentinel extends controller
      * Autonomous Firewall Inspector.
      * Performs Background Hourly Sync and Real-time Blocking.
      */
-    public function inspect(): void 
+    public static function inspect(): void 
     {
         $model = $this->model('sentinel_model');
         $config = $model->get_config_map();
