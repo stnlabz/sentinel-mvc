@@ -18,3 +18,12 @@ public static function inspect(): void
     -- method content
 }
 ```
+The in `/app/boostrap.php`
+```php
+// Squire
+$squire_path = __DIR__ . '/core/squire.php';
+if(file_exists($squire_path)) {
+    require_once $squire_path;
+    squire::maintenance(); // Triggers background audits [cite: 2026-01-22]
+}
+```
