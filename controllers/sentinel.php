@@ -5,14 +5,16 @@ class sentinel extends controller
 {
     /**
      * Autonomous Firewall Inspector.
-     * Performs Background Hourly Sync and Real-time Blocking.
+     * Static context for Bootstrap integration to ensure zero-latency blocking.
      */
     public static function inspect(): void 
     {
-        $model = $this->model('sentinel_model');
+        // Manual model instantiation to avoid $this->model in static context [cite: 2026-02-20]
+        require_once APPROOT . '/models/sentinel_model.php';
+        $model = new sentinel_model();
         $config = $model->get_config_map();
         
-        // 1. Autonomous Background Sync (Hourly selling point)
+        // 1. Autonomous Background Sync (Hourly)
         $last_sync = (int)($config['last_sync_time'] ?? 0);
         if ((time() - $last_sync) > 3600) {
             $model->pull_global_intelligence();
@@ -22,31 +24,38 @@ class sentinel extends controller
         $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
         $uri = $_SERVER['REQUEST_URI'] ?? '/';
 
-        // 2. Silent Block: Checks local DB status and terminates if already blocked
+        // 2. Silent Block: Immediate termination if IP is blacklisted
         if ($model->is_blocked($ip)) {
-            $this->block_request("IP Blocked by Sentinel Global Intel");
+            self::terminate_request("IP Blocked by Sentinel Global Intel");
         }
 
-        // 3. Pattern Matching with Auto-Block and Global Telemetry
+        // 3. Pattern Matching: Auto-blocking malicious URI strings
         $patterns = explode(',', $config['malicious_patterns'] ?? '');
         foreach ($patterns as $pattern) {
             $p = trim($pattern);
             if (!empty($p) && stripos($uri, $p) !== false) {
                 $model->log_threat($ip, 'pattern_match', $uri);
                 $model->block_ip($ip);
-                $this->block_request("Threat Pattern Detected: " . $p);
+                self::terminate_request("Threat Pattern Detected: " . $p);
             }
         }
     }
 
-    private function block_request($reason): void 
+    /**
+     * Static Termination: Replaces the non-static block_request to allow bootstrap calls.
+     */
+    private static function terminate_request($reason): void 
     {
         http_response_code(403);
         die("<h3>sentinel security</h3><p>access denied: " . htmlspecialchars($reason) . "</p>");
     }
 
+    /**
+     * Admin Interface: Standard non-static method for dashboard management.
+     */
     public function admin($url = []): void
     {
+        // Restricted to level 9 (Highest Office) [cite: 2026-02-20]
         if (!isset($_SESSION['user_level']) || $_SESSION['user_level'] < 9) {
             header("Location: /admin");
             exit;
@@ -56,6 +65,7 @@ class sentinel extends controller
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $action = $_POST['action'] ?? '';
+            // Update configuration or manually block an IP
             if ($action === 'update_config') { $model->save_config($_POST['settings']); }
             if ($action === 'block_ip') { $model->block_ip($_POST['ip']); }
             header("Location: /admin/sentinel");
