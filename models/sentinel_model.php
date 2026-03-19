@@ -81,31 +81,48 @@ class sentinel_model extends model
      * This allows the API to recognize the reporting plugin.
      */
     public function log_threat($ip, $category, $url): void 
-    {
-        $config = $this->get_config_map();
-        $this->query("INSERT INTO sentinel (ip_address, threat_category, request_url, status) VALUES (?, ?, ?, 'blocked')", [$ip, $category, $url]);
+{
+    $config = $this->get_config_map();
 
-        if (!empty($config['api_key'])) {
-            $payload = json_encode([
-                'source'  => 'sentinel',
-                'site_id' => $config['site_id'], // Root-level for API aggregation
-                'type'    => $category,
-                'details' => [
-                    'request_url' => $url,
-                    'ip_address'  => $ip,
-                    'domain'      => $_SERVER['HTTP_HOST'] ?? 'unknown'
-                ]
-            ]);
+    // 🔒 prevent duplicate insert
+    $exists = $this->query(
+        "SELECT id FROM sentinel WHERE ip_address = ? AND threat_category = ? LIMIT 1",
+        [$ip, $category]
+    )->fetch();
 
-            $ch = curl_init('https://api.stn-labz.com/v1/threats');
-            curl_setopt($ch, CURLOPT_POST, true);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
-            curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json', 'X-API-KEY: ' . $config['api_key']]);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 2);
-            curl_exec($ch);
-            curl_close($ch);
-        }
+    if (!$exists) {
+        $this->query(
+            "INSERT INTO sentinel (ip_address, threat_category, request_url, status) 
+             VALUES (?, ?, ?, 'blocked')",
+            [$ip, $category, $url]
+        );
     }
+
+    // API reporting stays the same
+    if (!empty($config['api_key'])) {
+        $payload = json_encode([
+            'source'  => 'sentinel',
+            'site_id' => $config['site_id'],
+            'type'    => $category,
+            'details' => [
+                'request_url' => $url,
+                'ip_address'  => $ip,
+                'domain'      => $_SERVER['HTTP_HOST'] ?? 'unknown'
+            ]
+        ]);
+
+        $ch = curl_init('https://api.stn-labz.com/v1/threats');
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Content-Type: application/json',
+            'X-API-KEY: ' . $config['api_key']
+        ]);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 2);
+        curl_exec($ch);
+        curl_close($ch);
+    }
+}
 
     public function get_recent_events(): array { return $this->query("SELECT * FROM sentinel ORDER BY timestamp DESC LIMIT 100")->fetchAll(); }
     public function save_config($settings): void { foreach($settings as $k => $v) { $this->query("INSERT INTO sentinel_config (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = ?", [$k, $v, $v]); } }
