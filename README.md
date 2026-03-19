@@ -1,7 +1,9 @@
 # sentinel-mvc
 The Sentinel Project in MVC Format
 
-Utilizes the Data controllers of the Indicia MVC project
+**Current Version**: 1.8.2
+
+Utilizes the Data controllers of the Chaos MVC project
 
 - Gathers intelligence from the STN-Labz API
 - Auto blocks on known bad IP's
@@ -26,4 +28,10 @@ if(file_exists($sentinel)) {
  require_once $sentinel;
  sentinel::inspect();
 }
+```
+
+In the [Chaos MVC](https://www.chaos-mvc.org):
+```
+$sentry = new sentinel();
+$sentry->inspect();
 ```
